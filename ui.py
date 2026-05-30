@@ -46,4 +46,58 @@ class UI:
         self.cell_size = cell_size
         self.margin = margin
         self.header_height = 50
+
+        left_origin = (margin, self.header_height + margin)
+        right_origin = (margin * 2 + cols * cell_size, self.header_height + margin)
+        self.player_grid = Grid(rows, cols, cell_size, cell_size, left_origin)
+        self.enemy_grid = Grid(rows, cols, cell_size, cell_size, right_origin)
+
+        self.player_board = self._new_board()
+        self.enemy_board = self._new_board()
+
+        self.phase = "placing"
+        self.turn = "player"
+        self.ready = False
+        self.lock_input = False
+
+        self.orientation = "H"
+        self.preview_cells = []
+        self.preview_valid = False
+
+        self.ship_queue = {
+            ("big boy", 5)
+            ("wow boy", 4)
+            ("medium boy", 3)
+            ("medium boyy", 3)
+            ("mohammad boy", 2)
+        }
         
+        self.placed_ships = []
+
+        self.font = pygame.font.SysFont(None, 28)
+        self.header_text = ""
+        self.updateStatusHeader()
+
+    def _new_board(self):
+        return [[self.empty for _ in range(self.cols)] for _ in range (self.rows)]
+        
+    def updateStatusHeader(self):
+        pass
+
+    def drawGrids(self):
+        pass
+
+    def _draw_board(self, grid, board, show_ships):
+        pass
+
+    def placementPreview(self, mouse_pos):
+        pass
+
+    def mouseClick(self, event):
+        pass
+
+    def toggleOrientation(self):
+        pass
+
+    def updateCell(self, board_name, row, col, state):
+        pass

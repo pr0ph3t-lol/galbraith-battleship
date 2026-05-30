@@ -1,4 +1,9 @@
 import socket
+while True:
+    user_port = int(input("Enter port number to connect to: "))
+    if 1024 <= user_port <= 65535:
+        break
+
 
 HOST = '127.0.0.1'  # localhost
 PORT = 65432        # any free port
