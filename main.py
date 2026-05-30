@@ -60,15 +60,19 @@ ships = {"Aircraft_Carrier": ships_module.ship("Aircraft Carrier", 5),
 
 # main game loop
 running = True
+ui_state = ui.UI(screen)
 while running:
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             running = False
+        elif event.type == pygame.KEYDOWN and event.key == pygame.K_r:
+            ui_state.toggleOrientation()
+        ui_state.mouseClick(event)
     
     # draw stuff here
-    grid = ui.Grid(10, 10, 50, 50, (50, 50))
     screen.fill((125, 125, 125))  # background color
-    grid.draw(screen)
+    ui_state.updateStatusHeader()
+    ui_state.drawGrids()
     
     # display mode text
     mode_text = font.render(f"Mode: {mode}", True, (0, 0, 0))
