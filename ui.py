@@ -65,6 +65,7 @@ class UI:
         self.preview_valid = False
 
         self.ship_queue = {
+            #placehold
             ("big boy", 5)
             ("wow boy", 4)
             ("medium boy", 3)
@@ -85,19 +86,65 @@ class UI:
         pass
 
     def drawGrids(self):
-        pass
+        self._draw_board(self.player_grid, self.player_board, show_ships = True)
+        self._draw_board(self.enemy_grid, self.enemy_board, show_ships = False)
+        self.player_grid.draw(self.screen)
+        self.enemy_griod.draw(self.screen)
 
     def _draw_board(self, grid, board, show_ships):
         pass
 
     def placementPreview(self, mouse_pos):
-        pass
+        if self.phase != "placing" or not self.ship_queue:
+            return
+        
+        cell = self.player_grid.cell_at_pos(mouse_pos)
+        if cell is None:
+            self.preview_cells = []
+            self.preview_valid = False
+            return
+        
+        start_row, start_col = cell
+        _, ship_size = self.ship_queue[0]
+        cells = []
+        for i in range(ship_size):
+            row = start_row + (i if self.orientation == "V" else 0)
+            col = start_col + (i if self.orientation == "H" else 0)
+            cells.append((row, col))
 
     def mouseClick(self, event):
-        pass
+        if event.type != pygame.MOUSEBUTTONDOWN:
+            return
+        
+        if event.button == 2:
+            if self.phase == "placing":
+                self.placementPreview(event.pos)
+                return
+        
+        if event.button == 3:
+            if self.phase == "placing":
+                self._confirm_placement()
+                return
+            if self.phase == "game":
+                self._attempt_shot(event.pos)
+                return
 
     def toggleOrientation(self):
         pass
 
     def updateCell(self, board_name, row, col, state):
         pass
+
+    def confirmPlacement(self):
+        pass
+
+    def attemptShot(self, mouse_pos):
+        pass
+
+    def validPlacement(self, cells):
+        pass
+
+    def forbidden(self, cells):
+        pass
+
+    
