@@ -7,6 +7,7 @@ class Grid:
         self.cell_width = cell_width
         self.cell_height = cell_height
         self.origin = origin
+        self.taken_cells = []
 
     def draw(self, surface):
         for row in range(self.rows):
@@ -83,7 +84,20 @@ class UI:
         return [[self.empty for _ in range(self.cols)] for _ in range (self.rows)]
         
     def updateStatusHeader(self):
-        pass
+        if self.phase == "placing":
+            if self.ship_queue:
+                self_name, ship_size = self.shipqueue[0]
+                self.header_text = (
+                    f"Placing: {ship_name} ({ship_size}) | "
+                    f"Orientation: {self.orientation} | MB! preview, MB2 confirm"
+                )
+            else:
+                self.header_text = "All ships are mohammad. waiting for mohammad"
+        elif self.phase == "game":
+            turn_text = "Your turn" if self.turn == "player" else "Enemy's turn"
+            self.header_text = f"Game phase - {turn_text}"
+        else:
+            self.header_text = "Unknown phase"
 
     def drawGrids(self):
         self._draw_board(self.player_grid, self.player_board, show_ships = True)
@@ -116,7 +130,7 @@ class UI:
         if event.type != pygame.MOUSEBUTTONDOWN:
             return
         
-        if event.button == 2:
+        if event.button == 1:
             if self.phase == "placing":
                 self.placementPreview(event.pos)
                 return
@@ -130,14 +144,28 @@ class UI:
                 return
 
     def toggleOrientation(self):
-        pass
+        self.orientation = "V" if self.orientation == "H" else "H"
+        self.updateStatusHeader()
 
     def updateCell(self, board_name, row, col, state):
         pass
 
     def confirmPlacement(self):
-        pass
+        if not self.preview_cells or not self.preview_valid:
+            return
+        
+        ship_name, ship_size = self.ship_queue.pop(0)
+        for row, col in self.preview_cells:
+            self.updateCell("player", row, col, self.ship)
 
+        self._mark_forbidden(self.preview_cells)
+        self.placed_ships.append( {"name": ship_name, "size": ship_size, "cells": self.preview_cells, "hits": 0})
+
+        if not self.ship_queue:
+            self.ready ="True"
+            self.phase = "game"
+            
+        self.updateStatusHeader()
     def attemptShot(self, mouse_pos):
         pass
 
