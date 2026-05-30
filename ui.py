@@ -1,7 +1,7 @@
 import pygame
 
 class Grid:
-    def __init__(self, rows, cols, cell_width, cell_height):
+    def __init__(self, rows, cols, cell_width, cell_height, origin):
         self.rows = rows
         self.cols = cols
         self.cell_width = cell_width
@@ -86,7 +86,7 @@ class UI:
     def updateStatusHeader(self):
         if self.phase == "placing":
             if self.ship_queue:
-                self_name, ship_size = self.shipqueue[0]
+                ship_name, ship_size = self.shipqueue[0]
                 self.header_text = (
                     f"Placing: {ship_name} ({ship_size}) | "
                     f"Orientation: {self.orientation} | MB! preview, MB2 confirm"
@@ -161,18 +161,78 @@ class UI:
         self._mark_forbidden(self.preview_cells)
         self.placed_ships.append( {"name": ship_name, "size": ship_size, "cells": self.preview_cells, "hits": 0})
 
+        self.preview_cells = []
+        self.preview_valid = False
+
         if not self.ship_queue:
             self.ready ="True"
             self.phase = "game"
             
         self.updateStatusHeader()
     def attemptShot(self, mouse_pos):
-        pass
+        if self.lock_input or self.turn != "player":
+            return
+        cell = self.enemy_grid.cell_at_pos(mouse_pos)
+        if cell is None:
+            return
+        row, col = cell
+        current = self.enemy_board[row][col]
+        if current in [self.hit, self.miss, self.pending]:
+            return
 
     def validPlacement(self, cells):
-        pass
+        for row, col in cells:
+            if row < 0 or col < 0 or row >= self.rows or col >= self.cols:
+                return False
+            if self.player_board[row][col] in (self.ship, self.forbidden):
+                return False
+        
+        for row, col in cells:
+            for n_row in range(row - 1, row + 2):
+                for n_col in range(col - 1, col + 2):
+                    if 0 <= n_row < self.rows and 0 <= n_col < self.cols:
+                        if self.player_board[n_row][n_col] == self.ship:
+                            return False
+                        
+
 
     def forbidden(self, cells):
-        pass
+        for row, col in cells:
+            for n_row in range(row - 1, row + 2):
+                for n_col in range(col - 1, col + 2):
+                    if 0 <= n_row < self.rows and 0 <= n_col < self.cols:
+                        if self.player_board[n_row][n_col] == self.empty:
+                            self.player_board[n_row][n_col] = self.forbidden
 
-    
+
+class Button:
+    def __init__(self, x, y, w, h, text, font=None):
+        self.rect = pygame.Rect(x, y, w, h)
+        self.text = text
+        self.font = pygame.font.Font(None, 32) if font is None else font
+        self.color = (100, 100, 100)
+        self.hover_color = (150, 150, 150)
+        self.active_color = (50, 150, 255)
+        self.current_color = self.color
+        self.hovered = False
+
+    def is_clicked(self, event):
+        if event.type == pygame.MOUSEBUTTONDOWN:
+            if self.rect.collidepoint(event.pos):
+                return True
+        return False
+
+    def update(self, mouse_pos):
+        self.hovered = self.rect.collidepoint(mouse_pos)
+        if self.hovered:
+            self.current_color = self.hover_color
+        else:
+            self.current_color = self.color
+
+    def draw(self, surface):
+        pygame.draw.rect(surface, self.current_color, self.rect)
+        pygame.draw.rect(surface, (0, 0, 0), self.rect, 3)
+        text_surf = self.font.render(self.text, True, (255, 255, 255))
+        text_rect = text_surf.get_rect(center=self.rect.center)
+        surface.blit(text_surf, text_rect)
+
