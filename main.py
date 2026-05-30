@@ -5,6 +5,7 @@ import ui
 
 print("test")
 print("testtesttest")
+print("mohammad123")
 ships = {"Aircraft_Carrier": ships.ship("Aircraft Carrier", 5), 
          "Battle_ship": ships.ship("Battleship", 4),
          "Submarine": ships.ship("Submarine", 3),
@@ -25,8 +26,9 @@ while running:
     
     # draw stuff here
     grid = ui.Grid(10, 10, 50, 50)
+    screen.fill((125, 125, 125))  # background color
     grid.draw(screen)  # create a grid with 10 rows and 10 columns, each cell is 50x50 pixels
-    screen.fill((255, 0, 0))  # background color
+
     pygame.display.flip()
 
 pygame.quit()
