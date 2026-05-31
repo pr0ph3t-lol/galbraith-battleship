@@ -29,7 +29,7 @@ opponent_ready = False
 game_started = False
 incoming_messages = []
 
-def send_message(msg_type, **kwargs):
+def send_message(msg_type, **kwargs): ##sends whether it is a shot or return
     global network_socket
     try:
         if network_socket:
@@ -160,7 +160,7 @@ while running:
                 else:
                     ui_state.turn = 'enemy'
                     network_status = "Game started. Waiting for server..."
-        if msg.get("type") == "SHOT":
+        elif msg.get("type") == "SHOT":
             row, col = msg.get("row"), msg.get("col")
             if ui_state.player_board[row][col] == ui_state.SHIP:
                 ui_state.updateCell("player", row, col, ui_state.HIT)
@@ -176,7 +176,8 @@ while running:
                 ui_state.updateCell("enemy", row, col, ui_state.HIT)
             else:
                 ui_state.updateCell("enemy", row, col, ui_state.MISS)
-        ui_state.turn = "enemy"
+            ui_state.turn = "enemy"
+            ui_state.lock_input = False
         incoming_messages.remove(msg)
 
 
