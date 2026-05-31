@@ -59,7 +59,7 @@ class UI:
         self.turn = "player"
         self.ready = False
         self.lock_input = False
-
+        
         self.orientation = "H"
         self.preview_cells = []
         self.preview_valid = False

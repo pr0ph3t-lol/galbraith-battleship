@@ -41,6 +41,7 @@ def send_message(msg_type, **kwargs):
 def listen_for_messages():
     global opponent_ready, incoming_messages, network_status
     while True:
+
         try:
             if network_socket:
                 data = network_socket.recv(1024)
@@ -51,6 +52,9 @@ def listen_for_messages():
                 if msg.get("type") == "READY":
                     opponent_ready = True
                     network_status = "Other player ready"
+                if msg.get("type") == "SHOT":
+                    network_status = f"Shot recieved at {msg.get('x')}, {msg.get('y')}"
+                
         except Exception:
             pass
         time.sleep(0.1)
@@ -107,11 +111,7 @@ while selecting:
 print(f"Mode selected: {mode}")
 threading.Thread(target=listen_for_messages, daemon=True).start()
 
-ships = {"Aircraft_Carrier": ships_module.ship("Aircraft Carrier", 5), 
-         "Battle_ship": ships_module.ship("Battleship", 4),
-         "Submarine": ships_module.ship("Submarine", 3),
-         "Destroyer": ships_module.ship("Destroyer", 3),
-         "Patrol_Boat": ships_module.ship("Patrol Boat", 2)}
+
 
 # main game loop
 running = True
@@ -131,6 +131,7 @@ while running:
         send_message("READY")
         network_status = "You are ready. Waiting for opponent..."
 
+
     if player_ready and opponent_ready and not game_started:
         game_started = True
         if mode == 'server':
@@ -139,6 +140,14 @@ while running:
         else:
             ui_state.turn = 'enemy'
             network_status = "Game started. Waiting for server..."
+
+    if game_started and ui_state.turn == 'player' and ui_state.shot_fired:
+        x, y = ui_state.shot_coordinates
+        send_message("SHOT", x=x, y=y)
+        network_status = f"Shot fired at {x}, {y}. Waiting for opponent..."
+        ui_state.shot_fired = False
+        ui_state.turn = 'enemy'
+
 
     for msg in incoming_messages[:]:
         if msg.get("type") == "READY":
@@ -151,7 +160,25 @@ while running:
                 else:
                     ui_state.turn = 'enemy'
                     network_status = "Game started. Waiting for server..."
+        if msg.get("type") == "SHOT":
+            row, col = msg.get("row"), msg.get("col")
+            if ui_state.play_board[row][col] == 'ship':
+                ui_state.updateCell("player", row, col, ui_state.HIT)
+                send_message("RESULT", row=row, col=col, result="HIT")
+            else:
+                ui_state.updateCell("player", row, col, ui_state.MISS)
+                send_message("RESULT", row=row, col=col, result="MISS")
+            ui_state.turn = "player"
+            ui_state.lock_input = False
+        elif msg.get("type") == "RESULT":
+            row, col, result = msg.get("row"), msg.get("col"), msg.get("result")
+            if msg.get("result") == "HIT":
+                ui_state.updateCell("enemy", row, col, ui_state.HIT)
+            else:
+                ui_state.updateCell("enemy", row, col, ui_state.MISS)
+                ui_state.turn = "enemy"
         incoming_messages.remove(msg)
+
 
     # draw stuff here
     screen.fill((125, 125, 125))  # background color
