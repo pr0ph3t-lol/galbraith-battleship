@@ -2,6 +2,8 @@ import pygame
 import ships as ships_module
 import ui
 import threading
+import json
+import time
 
 print("test")
 print("testtesttest")
@@ -10,7 +12,8 @@ print("mohammad123")
 pygame.init()
 
 screen = pygame.display.set_mode((800, 600))
-pygame.display.set_caption("Battleship")
+pygame.display.set_caption("Battleship") 
+
 font = pygame.font.Font(None, 36)
 small_font = pygame.font.Font(None, 24)
 
@@ -21,6 +24,36 @@ client_button = ui.Button(500, 250, 150, 50, "CLIENT", font)
 mode = None
 network_status = ""
 network_socket = None
+player_ready = False
+opponent_ready = False
+game_started = False
+incoming_messages = []
+
+def send_message(msg_type, **kwargs):
+    global network_socket
+    try:
+        if network_socket:
+            message = {"type": msg_type, **kwargs}
+            network_socket.send(json.dumps(message).encode())
+    except Exception:
+        pass
+
+def listen_for_messages():
+    global opponent_ready, incoming_messages, network_status
+    while True:
+        try:
+            if network_socket:
+                data = network_socket.recv(1024)
+                if not data:
+                    continue
+                msg = json.loads(data.decode())
+                incoming_messages.append(msg)
+                if msg.get("type") == "READY":
+                    opponent_ready = True
+                    network_status = "Other player ready"
+        except Exception:
+            pass
+        time.sleep(0.1)
 
 def run_server_thread():
     global network_socket, network_status
@@ -72,6 +105,7 @@ while selecting:
     pygame.display.flip()
 
 print(f"Mode selected: {mode}")
+threading.Thread(target=listen_for_messages, daemon=True).start()
 
 ships = {"Aircraft_Carrier": ships_module.ship("Aircraft Carrier", 5), 
          "Battle_ship": ships_module.ship("Battleship", 4),
@@ -82,6 +116,8 @@ ships = {"Aircraft_Carrier": ships_module.ship("Aircraft Carrier", 5),
 # main game loop
 running = True
 ui_state = ui.UI(screen)
+if mode == 'client':
+    ui_state.turn = 'enemy'
 while running:
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
@@ -90,6 +126,33 @@ while running:
             ui_state.toggleOrientation()
         ui_state.mouseClick(event)
     
+    if ui_state.ready and not player_ready:
+        player_ready = True
+        send_message("READY")
+        network_status = "You are ready. Waiting for opponent..."
+
+    if player_ready and opponent_ready and not game_started:
+        game_started = True
+        if mode == 'server':
+            ui_state.turn = 'player'
+            network_status = "Game started. Your turn."
+        else:
+            ui_state.turn = 'enemy'
+            network_status = "Game started. Waiting for server..."
+
+    for msg in incoming_messages[:]:
+        if msg.get("type") == "READY":
+            opponent_ready = True
+            if player_ready and not game_started:
+                game_started = True
+                if mode == 'server':
+                    ui_state.turn = 'player'
+                    network_status = "Game started. Your turn."
+                else:
+                    ui_state.turn = 'enemy'
+                    network_status = "Game started. Waiting for server..."
+        incoming_messages.remove(msg)
+
     # draw stuff here
     screen.fill((125, 125, 125))  # background color
     ui_state.updateStatusHeader()
