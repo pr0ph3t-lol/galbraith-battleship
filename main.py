@@ -1,6 +1,7 @@
 import pygame
 import ships as ships_module
 import ui
+import threading
 
 print("test")
 print("testtesttest")
@@ -11,13 +12,35 @@ pygame.init()
 screen = pygame.display.set_mode((800, 600))
 pygame.display.set_caption("Battleship")
 font = pygame.font.Font(None, 36)
+small_font = pygame.font.Font(None, 24)
 
 # Create buttons for mode selection
 server_button = ui.Button(150, 250, 150, 50, "SERVER", font)
 client_button = ui.Button(500, 250, 150, 50, "CLIENT", font)
 
 mode = None
-network_module = None
+network_status = ""
+network_socket = None
+
+def run_server_thread():
+    global network_socket, network_status
+    try:
+        import server
+        conn, addr = server.start_server()
+        network_socket = conn
+        network_status = f"Connected by {addr[0]}:{addr[1]}"
+    except Exception as e:
+        network_status = f"Server error: {e}"
+
+def run_client_thread():
+    global network_socket, network_status
+    try:
+        import client
+        network_status = "Connecting..."
+        network_socket = client.connect_client()
+        network_status = "Connected to server"
+    except Exception as e:
+        network_status = f"Client error: {e}"
 
 # Wait for button click to select mode
 selecting = True
@@ -32,23 +55,21 @@ while selecting:
             exit()
         if server_button.is_clicked(event):
             mode = 'server'
+            network_status = 'Waiting for connection...'
             selecting = False
+            threading.Thread(target=run_server_thread, daemon=True).start()
+
         if client_button.is_clicked(event):
             mode = 'client'
+            network_status = 'Connecting to server...'
             selecting = False
-
+            threading.Thread(target=run_client_thread, daemon=True).start()
     screen.fill((125, 125, 125))
     prompt_surf = font.render("Select Mode:", True, (0, 0, 0))
     screen.blit(prompt_surf, (250, 150))
     server_button.draw(screen)
     client_button.draw(screen)
     pygame.display.flip()
-
-# Import appropriate module after mode is selected
-if mode == 'server':
-    import server as network_module
-else:
-    import client as network_module
 
 print(f"Mode selected: {mode}")
 
@@ -74,9 +95,11 @@ while running:
     ui_state.updateStatusHeader()
     ui_state.drawGrids()
     
-    # display mode text
+    # display mode text and network status
     mode_text = font.render(f"Mode: {mode}", True, (0, 0, 0))
     screen.blit(mode_text, (50, 520))
+    status_text = small_font.render(network_status, True, (0, 0, 0))
+    screen.blit(status_text, (50, 560))
 
     pygame.display.flip()
 
