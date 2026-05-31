@@ -142,9 +142,9 @@ while running:
             network_status = "Game started. Waiting for server..."
 
     if game_started and ui_state.turn == 'player' and ui_state.shot_fired:
-        x, y = ui_state.shot_coordinates
-        send_message("SHOT", x=x, y=y)
-        network_status = f"Shot fired at {x}, {y}. Waiting for opponent..."
+        row, col = ui_state.shot_coordinates
+        send_message("SHOT", row=row, col=col)
+        network_status = f"Shot fired at {row}, {col}. Waiting for opponent..."
         ui_state.shot_fired = False
         ui_state.turn = 'enemy'
 
@@ -162,7 +162,7 @@ while running:
                     network_status = "Game started. Waiting for server..."
         if msg.get("type") == "SHOT":
             row, col = msg.get("row"), msg.get("col")
-            if ui_state.play_board[row][col] == 'ship':
+            if ui_state.player_board[row][col] == ui_state.SHIP:
                 ui_state.updateCell("player", row, col, ui_state.HIT)
                 send_message("RESULT", row=row, col=col, result="HIT")
             else:
@@ -176,7 +176,7 @@ while running:
                 ui_state.updateCell("enemy", row, col, ui_state.HIT)
             else:
                 ui_state.updateCell("enemy", row, col, ui_state.MISS)
-                ui_state.turn = "enemy"
+        ui_state.turn = "enemy"
         incoming_messages.remove(msg)
 
 

@@ -59,7 +59,10 @@ class UI:
         self.turn = "player"
         self.ready = False
         self.lock_input = False
-        
+
+        self.shot_fired = False
+        self.shot_coordinates = None
+
         self.orientation = "H"
         self.preview_cells = []
         self.preview_valid = False
@@ -222,6 +225,8 @@ class UI:
 
         self.updateCell("enemy", row, col, self.PENDING)
         self.lock_input = True
+        self.shot_fired = True
+        self.shot_coordinates = (row, col)
 
     def _valid_placement(self, cells):
         for row, col in cells:
