@@ -199,13 +199,21 @@ while running:
                 network_status = "All enemy ships sunk! You win!"
                 game_started = False
                 send_message("GAME_OVER", result="WIN")
+                ui_state.lock_input = True
+
 
             ui_state.turn = "enemy"
             ui_state.lock_input = False
         elif msg.get("type") == "GAME_OVER":
             if msg.get("result") == "WIN":
                 network_status = "YOU LOSE!"
-        
+                ui_state.lock_input = True
+                send_message("GAME_OVER", result="LOSE")
+        if msg.get("type") == "GAME_OVER":
+            if msg.get("result") == "LOSE":
+                network_status = "YOU WIN!"
+                ui_state.lock_input = True
+                
         incoming_messages.remove(msg)
 
 
