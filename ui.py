@@ -46,7 +46,7 @@ class UI:
         self.cell_size = cell_size
         self.margin = margin
         self.header_height = 50
-
+        self.totalhits = 0
         left_origin = (margin, self.header_height + margin)
         right_origin = (margin * 2 + cols * cell_size, self.header_height + margin)
         self.player_grid = Grid(rows, cols, cell_size, cell_size, left_origin)
@@ -54,7 +54,7 @@ class UI:
 
         self.player_board = self._new_board()
         self.enemy_board = self._new_board()
-
+        self.totalhits = 0
         self.phase = "placing"
         self.turn = "player"
         self.ready = False
@@ -74,7 +74,7 @@ class UI:
             ("Destroyer", 3),
             ("Patrol Boat", 2),
         ]
-        
+        self.totalcells = sum(size for _, size in self.ship_queue)
         self.placed_ships = []
 
         self.font = pygame.font.SysFont(None, 28)

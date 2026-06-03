@@ -11,7 +11,12 @@ print("mohammad123")
 
 pygame.init()
 
-screen = pygame.display.set_mode((800, 600))
+# Ensure window is wide enough for two grids (2 * cols * cell_size + 3 * margin)
+GRID_COLS = 10
+CELL_SIZE = 40
+MARGIN = 20
+WINDOW_WIDTH = 2 * GRID_COLS * CELL_SIZE + 3 * MARGIN
+screen = pygame.display.set_mode((WINDOW_WIDTH, 600))
 pygame.display.set_caption("Battleship") 
 
 font = pygame.font.Font(None, 36)
@@ -28,6 +33,7 @@ player_ready = False
 opponent_ready = False
 game_started = False
 incoming_messages = []
+
 
 def send_message(msg_type, **kwargs): ##sends whether it is a shot or return
     global network_socket
@@ -178,15 +184,32 @@ while running:
             ui_state.lock_input = False
         elif msg.get("type") == "RESULT":
             row, col, result = msg.get("row"), msg.get("col"), msg.get("result")
-            if msg.get("result") == "HIT":
+            if result == "HIT":
                 ui_state.updateCell("enemy", row, col, ui_state.HIT)
+                ui_state.totalhits += 1
+            elif result == "SUNK":
+                ui_state.updateCell("enemy", row, col, ui_state.HIT)
+                ui_state.totalhits += 1
+                network_status = f"You sunk the enemy's {msg.get('ship_name')}!"
             else:
                 ui_state.updateCell("enemy", row, col, ui_state.MISS)
+
+            # check win condition
+            if ui_state.totalhits >= ui_state.totalcells:
+                network_status = "All enemy ships sunk! You win!"
+                game_started = False
+                send_message("GAME_OVER", result="WIN")
+
             ui_state.turn = "enemy"
             ui_state.lock_input = False
+        elif msg.get("type") == "GAME_OVER":
+            if msg.get("result") == "WIN":
+                network_status = "YOU LOSE!"
+        
         incoming_messages.remove(msg)
 
 
+        
     # draw stuff here
     screen.fill((125, 125, 125))  # background color
     ui_state.updateStatusHeader()
