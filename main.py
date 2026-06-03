@@ -53,7 +53,10 @@ def listen_for_messages():
                     opponent_ready = True
                     network_status = "Other player ready"
                 if msg.get("type") == "SHOT":
-                    network_status = f"Shot recieved at {msg.get('x')}, {msg.get('y')}"
+                    if msg.get("row") != None and msg.get("col") == None:
+                        network_status = f"Shot recieved at {msg.get('x')}, {msg.get('y')}"
+                    else:
+                        network_status = f"Shot recieved at {msg.get('row')}, {msg.get('col')}"
                 
         except Exception:
             pass
@@ -144,7 +147,10 @@ while running:
     if game_started and ui_state.turn == 'player' and ui_state.shot_fired:
         row, col = ui_state.shot_coordinates
         send_message("SHOT", row=row, col=col)
-        network_status = f"Shot fired at {row}, {col}. Waiting for opponent..."
+        if row != None and col != None:
+            network_status = f"Shot fired at {row}, {col}. Waiting for opponent..."
+        else:
+            network_status = "Shot missed"
         ui_state.shot_fired = False
         ui_state.turn = 'enemy'
 
