@@ -1,5 +1,6 @@
 import pygame
 
+# grid class helper handles board drawing and finds which cell is under the mouse
 class Grid:
     def __init__(self, rows, cols, cell_width, cell_height, origin):
         self.rows = rows
@@ -8,6 +9,7 @@ class Grid:
         self.cell_height = cell_height
         self.origin = origin
 
+# draw grid lines for each cell on the board
     def draw(self, surface):
         for row in range(self.rows):
             for col in range(self.cols):
@@ -19,6 +21,7 @@ class Grid:
                 )
                 pygame.draw.rect(surface, (0, 0, 0), rect, 1)
 
+# convert a mouse position into a grid row/col if inside the grid
     def cell_at_pos(self, pos):
         x, y = pos
         ox, oy = self.origin
@@ -30,6 +33,7 @@ class Grid:
             return None
         return int(row), int(col)
     
+# ui state and game board logic for battleship placement and firing
 class UI:
     EMPTY = 0
     SHIP = 1
@@ -70,6 +74,7 @@ class UI:
         self.preview_cells = []
         self.preview_valid = False
 
+# list of ships that must be placed in order before the game begins
         self.ship_queue = [
             ("Aircraft Carrier", 5),
             ("Battleship", 4),
@@ -84,9 +89,11 @@ class UI:
         self.header_text = ""
         self.updateStatusHeader()
 
+# build a blank grid filled with EMPTY cell states
     def _new_board(self):
         return [[self.EMPTY for _ in range(self.cols)] for _ in range(self.rows)]
         
+# draw the header text describing current phase and actions
     def updateStatusHeader(self):
         if self.game_over:
             if self.winner_text:
@@ -116,12 +123,14 @@ class UI:
         text_surf = self.font.render(self.header_text, True, (20, 20, 20))
         self.screen.blit(text_surf, (self.margin, 12))
 
+# draw both player and enemy battle grids onto the screen
     def drawGrids(self):
         self._draw_board(self.player_grid, self.player_board, show_ships=True)
         self._draw_board(self.enemy_grid, self.enemy_board, show_ships=False)
         self.player_grid.draw(self.screen)
         self.enemy_grid.draw(self.screen)
 
+# helper to draw a single grid board and any preview squares
     def _draw_board(self, grid, board, show_ships):
         for row in range(self.rows):
             for col in range(self.cols):
@@ -157,6 +166,7 @@ class UI:
                 )
                 pygame.draw.rect(self.screen, preview_color, rect)
 
+# compute the preview placement cells when mouse is over the player grid
     def placementPreview(self, mouse_pos):
         if self.phase != "placing" or not self.ship_queue:
             return
@@ -178,11 +188,13 @@ class UI:
         self.preview_cells = cells
         self.preview_valid = self._valid_placement(cells)
 
+# route mouse clicks to placement preview/confirmation or shot preview/confirmation
     def mouseClick(self, event):
         if event.type != pygame.MOUSEBUTTONDOWN:
             return
         
         if event.button == 1:
+# left click previews a placement or a shot target
             if self.phase == "placing":
                 self.placementPreview(event.pos)
                 return
@@ -191,6 +203,7 @@ class UI:
                 return
         
         if event.button == 3:
+# right click confirms the current preview action
             if self.phase == "placing":
                 self.confirmPlacement()
                 return
@@ -198,15 +211,18 @@ class UI:
                 self.confirmShot(event.pos)
                 return
 
+# flip ship placement orientation and update the status header
     def toggleOrientation(self):
         self.orientation = "V" if self.orientation == "H" else "H"
         self.updateStatusHeader()
 
+# safely update a board cell state if the coordinates are valid
     def updateCell(self, board_name, row, col, state):
         board = self.player_board if board_name == "player" else self.enemy_board
         if 0 <= row < self.rows and 0 <= col < self.cols:
             board[row][col] = state
 
+# confirm the current ship preview placement and lock it onto the board
     def confirmPlacement(self):
         if not self.preview_cells or not self.preview_valid:
             return
@@ -228,6 +244,7 @@ class UI:
             self.phase = "game"
             
         self.updateStatusHeader()
+# clear any aiming preview from the enemy grid
     def clear_shot_preview(self):
         if self.aim_cell:
             row, col = self.aim_cell
@@ -235,6 +252,7 @@ class UI:
                 self.updateCell("enemy", row, col, self.EMPTY)
         self.aim_cell = None
 
+# show shot preview on the enemy grid when player can fire
     def previewShot(self, mouse_pos):
         if self.lock_input or self.turn != "player" or self.game_over:
             return
@@ -249,6 +267,7 @@ class UI:
         self.updateCell("enemy", row, col, self.PREVIEW)
         self.aim_cell = (row, col)
 
+# confirm the shot and mark it pending until result arrives
     def confirmShot(self, mouse_pos):
         if self.lock_input or self.turn != "player" or self.game_over:
             return
@@ -263,6 +282,7 @@ class UI:
         self.shot_coordinates = (row, col)
         self.aim_cell = None
 
+# validate that the ship cells fit and do not collide with existing ships
     def _valid_placement(self, cells):
         for row, col in cells:
             if row < 0 or col < 0 or row >= self.rows or col >= self.cols:
@@ -280,6 +300,7 @@ class UI:
                         
 
 
+# mark surrounding cells as forbidden after placing a ship
     def _mark_forbidden(self, cells):
         for row, col in cells:
             for n_row in range(row - 1, row + 2):
@@ -288,6 +309,7 @@ class UI:
                         if self.player_board[n_row][n_col] == self.EMPTY:
                             self.player_board[n_row][n_col] = self.FORBIDDEN
 
+# compute all border cells around a sunk ship for marking misses
     def surrounding_cells(self, cells):
         border = set()
         cell_set = set(cells)
@@ -299,12 +321,14 @@ class UI:
                             border.add((n_row, n_col))
         return list(border)
 
+# find which placed ship occupies a specific board cell
     def ship_at(self, row, col):
         for ship in self.placed_ships:
             if (row, col) in ship["cells"]:
                 return ship
         return None
 
+# register a hit on a ship and return it if sunk
     def register_hit(self, row, col):
         ship = self.ship_at(row, col)
         if not ship:
@@ -314,11 +338,14 @@ class UI:
             return ship
         return None
 
+# return true when every placed ship has been sunk
     def all_ships_sunk(self):
         return all(ship["hits"] >= ship["size"] for ship in self.placed_ships)
 
 
+# button class helper for mode selection and basic hover rendering
 class Button:
+# button constructor creates the clickable rectangle and text style
     def __init__(self, x, y, w, h, text, font=None):
         self.rect = pygame.Rect(x, y, w, h)
         self.text = text
@@ -329,12 +356,14 @@ class Button:
         self.current_color = self.color
         self.hovered = False
 
+# return true when this button is clicked by the mouse
     def is_clicked(self, event):
         if event.type == pygame.MOUSEBUTTONDOWN:
             if self.rect.collidepoint(event.pos):
                 return True
         return False
 
+# update hover state and button color based on mouse position
     def update(self, mouse_pos):
         self.hovered = self.rect.collidepoint(mouse_pos)
         if self.hovered:
@@ -342,6 +371,7 @@ class Button:
         else:
             self.current_color = self.color
 
+# draw the button rectangle and text onto the surface
     def draw(self, surface):
         pygame.draw.rect(surface, self.current_color, self.rect)
         pygame.draw.rect(surface, (0, 0, 0), self.rect, 3)
