@@ -59,9 +59,12 @@ class UI:
         self.turn = "player"
         self.ready = False
         self.lock_input = False
+        self.game_over = False
+        self.winner_text = None
 
         self.shot_fired = False
         self.shot_coordinates = None
+        self.aim_cell = None
 
         self.orientation = "H"
         self.preview_cells = []
@@ -85,7 +88,12 @@ class UI:
         return [[self.EMPTY for _ in range(self.cols)] for _ in range(self.rows)]
         
     def updateStatusHeader(self):
-        if self.phase == "placing":
+        if self.game_over:
+            if self.winner_text:
+                self.header_text = f"Game over - {self.winner_text}"
+            else:
+                self.header_text = "Game over"
+        elif self.phase == "placing":
             if self.ship_queue:
                 ship_name, ship_size = self.ship_queue[0]
                 self.header_text = (
@@ -96,7 +104,10 @@ class UI:
                 self.header_text = "All ships placed. Waiting for opponent."
         elif self.phase == "game":
             turn_text = "Your turn" if self.turn == "player" else "Enemy's turn"
-            self.header_text = f"Game phase - {turn_text}"
+            if self.turn == "player":
+                self.header_text = f"Game phase - {turn_text} | MB1 preview, MB2 confirm"
+            else:
+                self.header_text = f"Game phase - {turn_text}"
         else:
             self.header_text = "Unknown phase"
 
@@ -130,6 +141,8 @@ class UI:
                     color = (200, 200, 200)
                 elif state == self.PENDING:
                     color = (220, 180, 60)
+                elif state == self.PREVIEW:
+                    color = (80, 130, 200)
                 if color:
                     pygame.draw.rect(self.screen, color, rect)
 
@@ -173,13 +186,16 @@ class UI:
             if self.phase == "placing":
                 self.placementPreview(event.pos)
                 return
+            if self.phase == "game":
+                self.previewShot(event.pos)
+                return
         
         if event.button == 3:
             if self.phase == "placing":
                 self.confirmPlacement()
                 return
             if self.phase == "game":
-                self.attemptShot(event.pos)
+                self.confirmShot(event.pos)
                 return
 
     def toggleOrientation(self):
@@ -212,8 +228,15 @@ class UI:
             self.phase = "game"
             
         self.updateStatusHeader()
-    def attemptShot(self, mouse_pos):
-        if self.lock_input or self.turn != "player":
+    def clear_shot_preview(self):
+        if self.aim_cell:
+            row, col = self.aim_cell
+            if self.enemy_board[row][col] == self.PREVIEW:
+                self.updateCell("enemy", row, col, self.EMPTY)
+        self.aim_cell = None
+
+    def previewShot(self, mouse_pos):
+        if self.lock_input or self.turn != "player" or self.game_over:
             return
         cell = self.enemy_grid.cell_at_pos(mouse_pos)
         if cell is None:
@@ -222,11 +245,23 @@ class UI:
         current = self.enemy_board[row][col]
         if current in (self.HIT, self.MISS, self.PENDING):
             return
+        self.clear_shot_preview()
+        self.updateCell("enemy", row, col, self.PREVIEW)
+        self.aim_cell = (row, col)
 
+    def confirmShot(self, mouse_pos):
+        if self.lock_input or self.turn != "player" or self.game_over:
+            return
+        if self.aim_cell is None:
+            return
+        row, col = self.aim_cell
+        if self.enemy_board[row][col] != self.PREVIEW:
+            return
         self.updateCell("enemy", row, col, self.PENDING)
         self.lock_input = True
         self.shot_fired = True
         self.shot_coordinates = (row, col)
+        self.aim_cell = None
 
     def _valid_placement(self, cells):
         for row, col in cells:
@@ -252,6 +287,35 @@ class UI:
                     if 0 <= n_row < self.rows and 0 <= n_col < self.cols:
                         if self.player_board[n_row][n_col] == self.EMPTY:
                             self.player_board[n_row][n_col] = self.FORBIDDEN
+
+    def surrounding_cells(self, cells):
+        border = set()
+        cell_set = set(cells)
+        for row, col in cell_set:
+            for n_row in range(row - 1, row + 2):
+                for n_col in range(col - 1, col + 2):
+                    if 0 <= n_row < self.rows and 0 <= n_col < self.cols:
+                        if (n_row, n_col) not in cell_set:
+                            border.add((n_row, n_col))
+        return list(border)
+
+    def ship_at(self, row, col):
+        for ship in self.placed_ships:
+            if (row, col) in ship["cells"]:
+                return ship
+        return None
+
+    def register_hit(self, row, col):
+        ship = self.ship_at(row, col)
+        if not ship:
+            return None
+        ship["hits"] += 1
+        if ship["hits"] >= ship["size"]:
+            return ship
+        return None
+
+    def all_ships_sunk(self):
+        return all(ship["hits"] >= ship["size"] for ship in self.placed_ships)
 
 
 class Button:

@@ -1,13 +1,28 @@
 import pygame
-import ships as ships_module
 import ui
 import threading
 import json
 import time
+import os
+import sys
+import subprocess
 
-print("test")
-print("testtesttest")
-print("mohammad123")
+def resolve_mode_from_args():
+    if "--mode" in sys.argv:
+        idx = sys.argv.index("--mode")
+        if idx + 1 < len(sys.argv):
+            candidate = sys.argv[idx + 1].lower()
+            if candidate in ("server", "client"):
+                return candidate
+    return None
+
+if "--dual" in sys.argv:
+    script_path = os.path.abspath(__file__)
+    python_exe = sys.executable
+    subprocess.Popen([python_exe, script_path, "--mode", "server"])
+    time.sleep(0.4)
+    subprocess.Popen([python_exe, script_path, "--mode", "client"])
+    raise SystemExit
 
 pygame.init()
 
@@ -26,43 +41,55 @@ small_font = pygame.font.Font(None, 24)
 server_button = ui.Button(150, 250, 150, 50, "SERVER", font)
 client_button = ui.Button(500, 250, 150, 50, "CLIENT", font)
 
-mode = None
+mode = resolve_mode_from_args()
 network_status = ""
 network_socket = None
 player_ready = False
 opponent_ready = False
 game_started = False
 incoming_messages = []
+recv_buffer = ""
+mode_started = False
 
 
-def send_message(msg_type, **kwargs): ##sends whether it is a shot or return
+def send_message(msg_type, **kwargs):
+    """Send a JSON message over the current network socket."""
     global network_socket
     try:
         if network_socket:
             message = {"type": msg_type, **kwargs}
-            network_socket.send(json.dumps(message).encode())
+            network_socket.send((json.dumps(message) + "\n").encode())
     except Exception:
         pass
 
 def listen_for_messages():
-    global opponent_ready, incoming_messages, network_status
+    global opponent_ready, incoming_messages, network_status, recv_buffer, network_socket
     while True:
 
         try:
             if network_socket:
                 data = network_socket.recv(1024)
                 if not data:
+                    network_status = "Connection closed"
+                    network_socket = None
                     continue
-                msg = json.loads(data.decode())
-                incoming_messages.append(msg)
-                if msg.get("type") == "READY":
-                    opponent_ready = True
-                    network_status = "Other player ready"
-                if msg.get("type") == "SHOT":
-                    if msg.get("row") != None and msg.get("col") == None:
-                        network_status = f"Shot recieved at {msg.get('x')}, {msg.get('y')}"
-                    else:
-                        network_status = f"Shot recieved at {msg.get('row')}, {msg.get('col')}"
+                recv_buffer += data.decode()
+                while "\n" in recv_buffer:
+                    raw, recv_buffer = recv_buffer.split("\n", 1)
+                    if not raw.strip():
+                        continue
+                    msg = json.loads(raw)
+                    incoming_messages.append(msg)
+                    if msg.get("type") == "READY":
+                        opponent_ready = True
+                        network_status = "Other player ready"
+                    if msg.get("type") == "SHOT":
+                        row = msg.get("row")
+                        col = msg.get("col")
+                        if row is not None and col is not None:
+                            network_status = f"Shot received at {row}, {col}"
+                        else:
+                            network_status = "Shot received"
                 
         except Exception:
             pass
@@ -89,7 +116,7 @@ def run_client_thread():
         network_status = f"Client error: {e}"
 
 # Wait for button click to select mode
-selecting = True
+selecting = mode is None
 while selecting:
     mouse_pos = pygame.mouse.get_pos()
     server_button.update(mouse_pos)
@@ -103,12 +130,14 @@ while selecting:
             mode = 'server'
             network_status = 'Waiting for connection...'
             selecting = False
+            mode_started = True
             threading.Thread(target=run_server_thread, daemon=True).start()
 
         if client_button.is_clicked(event):
             mode = 'client'
             network_status = 'Connecting to server...'
             selecting = False
+            mode_started = True
             threading.Thread(target=run_client_thread, daemon=True).start()
     screen.fill((125, 125, 125))
     prompt_surf = font.render("Select Mode:", True, (0, 0, 0))
@@ -116,6 +145,13 @@ while selecting:
     server_button.draw(screen)
     client_button.draw(screen)
     pygame.display.flip()
+
+if not mode_started and mode == 'server':
+    network_status = 'Waiting for connection...'
+    threading.Thread(target=run_server_thread, daemon=True).start()
+elif not mode_started and mode == 'client':
+    network_status = 'Connecting to server...'
+    threading.Thread(target=run_client_thread, daemon=True).start()
 
 print(f"Mode selected: {mode}")
 threading.Thread(target=listen_for_messages, daemon=True).start()
@@ -153,15 +189,17 @@ while running:
     if game_started and ui_state.turn == 'player' and ui_state.shot_fired:
         row, col = ui_state.shot_coordinates
         send_message("SHOT", row=row, col=col)
-        if row != None and col != None:
+        if row is not None and col is not None:
             network_status = f"Shot fired at {row}, {col}. Waiting for opponent..."
         else:
             network_status = "Shot missed"
         ui_state.shot_fired = False
-        ui_state.turn = 'enemy'
 
 
     for msg in incoming_messages[:]:
+        if ui_state.game_over and msg.get("type") != "GAME_OVER":
+            incoming_messages.remove(msg)
+            continue
         if msg.get("type") == "READY":
             opponent_ready = True
             if player_ready and not game_started:
@@ -174,45 +212,95 @@ while running:
                     network_status = "Game started. Waiting for server..."
         elif msg.get("type") == "SHOT":
             row, col = msg.get("row"), msg.get("col")
-            if ui_state.player_board[row][col] == ui_state.SHIP:
+            if row is None or col is None or not (0 <= row < ui_state.rows and 0 <= col < ui_state.cols):
+                send_message("RESULT", row=row, col=col, result="MISS")
+            elif ui_state.player_board[row][col] == ui_state.SHIP:
                 ui_state.updateCell("player", row, col, ui_state.HIT)
-                send_message("RESULT", row=row, col=col, result="HIT")
+                sunk_ship = ui_state.register_hit(row, col)
+                if sunk_ship:
+                    border_cells = ui_state.surrounding_cells(sunk_ship["cells"])
+                    for b_row, b_col in border_cells:
+                        if ui_state.player_board[b_row][b_col] == ui_state.EMPTY:
+                            ui_state.updateCell("player", b_row, b_col, ui_state.MISS)
+                    network_status = f"Your {sunk_ship['name']} was sunk!"
+                    send_message(
+                        "RESULT",
+                        row=row,
+                        col=col,
+                        result="SUNK",
+                        ship_name=sunk_ship["name"],
+                        ship_cells=sunk_ship["cells"],
+                        border_cells=border_cells,
+                    )
+                    if ui_state.all_ships_sunk():
+                        network_status = "All your ships are sunk! You lose!"
+                        ui_state.game_over = True
+                        ui_state.winner_text = "YOU LOSE!"
+                        ui_state.lock_input = True
+                        game_started = False
+                        send_message("GAME_OVER", result="LOSE")
+                    else:
+                        ui_state.turn = "enemy"
+                        ui_state.lock_input = True
+                else:
+                    send_message("RESULT", row=row, col=col, result="HIT")
+                    ui_state.turn = "enemy"
+                    ui_state.lock_input = True
             else:
                 ui_state.updateCell("player", row, col, ui_state.MISS)
                 send_message("RESULT", row=row, col=col, result="MISS")
-            ui_state.turn = "player"
-            ui_state.lock_input = False
+                ui_state.turn = "player"
+                ui_state.lock_input = False
         elif msg.get("type") == "RESULT":
             row, col, result = msg.get("row"), msg.get("col"), msg.get("result")
             if result == "HIT":
                 ui_state.updateCell("enemy", row, col, ui_state.HIT)
                 ui_state.totalhits += 1
+                ui_state.turn = "player"
             elif result == "SUNK":
-                ui_state.updateCell("enemy", row, col, ui_state.HIT)
+                if row is not None and col is not None:
+                    ui_state.updateCell("enemy", row, col, ui_state.HIT)
+                ship_cells = msg.get("ship_cells") or []
+                for cell in ship_cells:
+                    if not cell or len(cell) != 2:
+                        continue
+                    s_row, s_col = cell
+                    ui_state.updateCell("enemy", s_row, s_col, ui_state.HIT)
+                border_cells = msg.get("border_cells") or []
+                for cell in border_cells:
+                    if not cell or len(cell) != 2:
+                        continue
+                    b_row, b_col = cell
+                    if ui_state.enemy_board[b_row][b_col] == ui_state.EMPTY:
+                        ui_state.updateCell("enemy", b_row, b_col, ui_state.MISS)
                 ui_state.totalhits += 1
                 network_status = f"You sunk the enemy's {msg.get('ship_name')}!"
+                ui_state.turn = "player"
             else:
                 ui_state.updateCell("enemy", row, col, ui_state.MISS)
+                ui_state.turn = "enemy"
 
             # check win condition
             if ui_state.totalhits >= ui_state.totalcells:
                 network_status = "All enemy ships sunk! You win!"
+                ui_state.game_over = True
+                ui_state.winner_text = "YOU WIN!"
                 game_started = False
                 send_message("GAME_OVER", result="WIN")
                 ui_state.lock_input = True
-
-
-            ui_state.turn = "enemy"
-            ui_state.lock_input = False
+            elif not ui_state.game_over:
+                ui_state.lock_input = False
         elif msg.get("type") == "GAME_OVER":
-            if msg.get("result") == "WIN":
-                network_status = "YOU LOSE!"
+            if not ui_state.game_over:
+                if msg.get("result") == "WIN":
+                    network_status = "YOU LOSE!"
+                    ui_state.winner_text = "YOU LOSE!"
+                elif msg.get("result") == "LOSE":
+                    network_status = "YOU WIN!"
+                    ui_state.winner_text = "YOU WIN!"
                 ui_state.lock_input = True
-                send_message("GAME_OVER", result="LOSE")
-        if msg.get("type") == "GAME_OVER":
-            if msg.get("result") == "LOSE":
-                network_status = "YOU WIN!"
-                ui_state.lock_input = True
+                ui_state.game_over = True
+                game_started = False
                 
         incoming_messages.remove(msg)
 
